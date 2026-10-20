@@ -154,7 +154,7 @@ def test_text_equal_to_keyword_matches_once():
     assert hits("social security number", "social security number") == 1
 
 
-# --- Unicode (NFC + documented limitations) ---
+# --- Unicode (NFKC + documented limitations) ---
 
 
 @pytest.mark.parametrize(("text", "expected"), [("my résumé", 1), ("résumés", 0), ("RÉSUMÉ", 1)])
@@ -194,6 +194,139 @@ def test_limitation_simple_case_folding_treats_dotted_i_as_i():
 
 def test_limitation_simple_case_folding_keeps_eszett_distinct():
     assert hits("strasse", "straße") == 0
+
+
+# --- False positives and negatives (realistic corpus) ---
+
+
+@pytest.mark.parametrize(
+    ("keyword", "text"),
+    [
+        ("secret", "the secretary's office"),
+        ("card", "a wool cardigan"),
+        ("pin", "pinned message"),
+        ("id", "identity check"),
+        ("pass", "Bring your passport"),
+        ("token", "tokenizer settings"),
+        ("credit card", "credit cardigan sale"),
+        ("$100", "total $1000"),
+        ("ssn", "ssnssn"),
+    ],
+)
+def test_whole_word_rule_rejects_longer_words(keyword, text):
+    assert hits(keyword, text) == 0
+
+
+def test_nfkc_folds_ligatures_and_fullwidth():
+    assert hits("confidential", "This report is con\ufb01dential") == 1  # "fi" ligature
+    assert hits("password", "\uff50\uff41\uff53\uff53\uff57\uff4f\uff52\uff44") == 1  # full-width
+
+
+@pytest.mark.parametrize(
+    ("keyword", "text"),
+    [
+        ("password", "pass\u00adword"),  # soft hyphen
+        ("password", "pass\u200bword"),  # zero-width space
+        ("confidential", "\ufeffconfidential"),  # BOM
+    ],
+)
+def test_invisible_format_characters_are_ignored(keyword, text):
+    assert hits(keyword, text) == 1
+
+
+@pytest.mark.parametrize(("keyword", "text"), [("pass", "pass\u00adport"), ("pin", "pin\u200bned")])
+def test_invisible_format_characters_do_not_make_word_edges(keyword, text):
+    assert hits(keyword, text) == 0
+
+
+def test_keyword_of_only_invisible_characters_is_unusable():
+    assert hits("\u200b", "any\u200bthing") == 0
+    assert scan("any\u200bthing", [rule("\u200b")]) == []
+
+
+def test_limitation_zwnj_and_zwj_are_not_stripped():
+    # ZWNJ/ZWJ carry meaning in Arabic and Indic scripts, so they stay, as non-word characters.
+    assert hits("password", "pass\u200cword") == 0
+    assert hits("password", "pass\u200dword") == 0
+
+
+@pytest.mark.parametrize(
+    ("keyword", "text"),
+    [
+        ("password", "rotate all passwords"),
+        ("password", "DB_PASSWORD=x"),
+        ("api key", "apiKey = 1"),
+        ("internal only", "internal-only deck"),
+    ],
+)
+def test_limitation_plural_and_identifier_forms_need_their_own_keyword(keyword, text):
+    # Exact word forms: stemming or identifier splitting would cost the precision above.
+    assert hits(keyword, text) == 0
+
+
+@pytest.mark.parametrize(
+    ("keyword", "text", "expected"), [("+", "call +1 415", 1), ("--", "|------|", 3)]
+)
+def test_limitation_punctuation_only_keyword_matches_anywhere(keyword, text, expected):
+    # No word character at either edge, so no boundary applies; pick such keywords with care.
+    assert hits(keyword, text) == expected
+
+
+@pytest.mark.parametrize("text", ["100,000 EUR", "version 100.5", "100%"])
+def test_limitation_number_keyword_matches_inside_punctuated_number(text):
+    # Comma, dot and percent are not \w; a digit guard would also miss "100,200,300".
+    assert hits("100", text) == 1
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"), [("x@company.com.attacker.net", 1), ("x@mail.company.com", 0)]
+)
+def test_limitation_domain_suffix_keyword(text, expected):
+    # The keyword is a literal string, not a parsed address: "." after it is a valid edge.
+    assert hits("@company.com", text) == expected
+
+
+@pytest.mark.parametrize(("keyword", "text"), [("us", "let us know"), ("it", "It's fine")])
+def test_limitation_two_letter_keyword_fires_on_prose(keyword, text):
+    # Case is ignored, so an acronym is also a common word; use a threshold or a longer keyword.
+    assert hits(keyword, text) == 1
+
+
+def test_limitation_paragraph_break_joins_multi_word_keyword():
+    # Any whitespace run matches, so extracted text that wraps lines still matches.
+    assert hits("social security number", "social security\n\nNumber of dependents") == 1
+
+
+def test_threshold_is_the_false_positive_control():
+    footer = "CONFIDENTIAL: This message is confidential."
+
+    assert hits("confidential", footer) == 2
+    assert scan(footer, [rule("confidential", threshold=3)]) == []
+    assert scan(footer, [rule("confidential", threshold=2)])
+
+
+def test_limitation_matching_is_accent_sensitive():
+    # NFKC keeps accents; stripping them would merge distinct words in other languages.
+    assert hits("resume", "attach your résumé") == 0
+
+
+@pytest.mark.parametrize(("text", "expected"), [("请输入密码以继续", 0), ("密码: 1234", 1)])
+def test_limitation_scripts_without_spaces_have_no_word_boundaries(text, expected):
+    # Every CJK character is \w, so running text is one long word; script rules are out of scope.
+    assert hits("密码", text) == expected
+
+
+def test_limitation_arabic_prefixes_are_not_stripped():
+    # Like the Hebrew case: stripping an attached al- needs per-language rules.
+    assert hits("سري", "المستند السري") == 0
+
+
+@pytest.mark.parametrize(
+    ("keyword", "text"), [("secret", "Secret Santa on Friday"), ("token", "token-based auth")]
+)
+def test_limitation_semantic_false_positives_are_inherent(keyword, text):
+    # Keywords cannot see meaning; the threshold and keyword choice are the controls.
+    assert hits(keyword, text) == 1
 
 
 # --- Ordering and purity ---

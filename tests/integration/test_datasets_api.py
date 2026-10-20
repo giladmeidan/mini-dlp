@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import event, func, select, text
 
 from app.core.errors import UnprocessableError
 from app.models import DataSet, DataType, data_set_data_types
@@ -150,6 +150,30 @@ def test_list_is_newest_first_with_ties_broken_by_id(client, db_session):
 
     assert response.status_code == 200
     assert [uuid.UUID(item["id"]) for item in response.json()] == [second.id, first.id, *ties]
+
+
+def test_list_loads_member_ids_without_keyword_arrays(client, db_session, engine):
+    dt = seed_dt(db_session, "SSN", content=["ssn", "social security"])
+    seed_ds(db_session, "Payroll", [dt])
+    seed_ds(db_session, "HR", [dt])
+    statements: list[str] = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        response = client.get(URL)
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    assert response.status_code == 200
+    assert [item["data_type_ids"] for item in response.json()] == [[str(dt.id)]] * 2
+    # The data sets, then one selectin query for every set's members.
+    selects = [s for s in statements if s.lstrip().upper().startswith("SELECT")]
+    assert len(selects) == 2
+    [members] = [s for s in selects if "data_set_data_types" in s]
+    assert "content" not in members
 
 
 def test_get_by_id(client, db_session):

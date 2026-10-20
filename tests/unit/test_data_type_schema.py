@@ -50,6 +50,16 @@ def test_whitespace_only_keyword_is_rejected_at_its_index():
     assert error["type"] == "string_too_short"
 
 
+def test_control_character_keyword_is_rejected_at_its_index():
+    # \x1c survives Pydantic's strip but is whitespace to str.split(), so it collapses to "".
+    with pytest.raises(ValidationError) as exc_info:
+        DataTypeIn.model_validate(valid(content=["ssn", "\x1c"]))
+
+    [error] = exc_info.value.errors()
+    assert error["loc"] == ("content", 1)
+    assert error["type"] == "value_error"
+
+
 def test_rejects_keyword_of_201_chars():
     with pytest.raises(ValidationError) as exc_info:
         DataTypeIn.model_validate(valid(content=["x" * 201]))

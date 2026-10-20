@@ -13,7 +13,8 @@ class ErrorDetail(BaseModel):
     loc: list[str | int] = []
     msg: str
     type: str = ""
-    # Extra facts, e.g. the referencing Data Set. Strings only, mirroring Pydantic's ctx shape.
+    # Extra facts, e.g. the referencing Data Set. Values are strings (ids, names; the 413's
+    # counts are stringified too) so the envelope has one value type and a flat OpenAPI schema.
     ctx: dict[str, str] | None = None
 
 

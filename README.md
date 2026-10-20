@@ -9,9 +9,9 @@ SQLAlchemy 2.0, Alembic and PostgreSQL.
 
 - One command to run: `docker compose up --build -d --wait`.
 - 6 paths, 12 operations, all documented at `/docs`.
-- 190 automated tests (121 unit, 69 integration against real PostgreSQL), runnable with Docker only.
+- 230 automated tests (160 unit, 70 integration against real PostgreSQL), runnable with Docker only.
 - Scan text limit: 1,000,000 characters.
-- A Postman collection with 28 requests and 46 assertions that cleans up after itself.
+- A Postman collection with 29 requests and 48 assertions that cleans up after itself.
 
 ## Run
 
@@ -70,3 +70,11 @@ Optional, with Node installed: `make postman`.
   duration.
 - No authentication.
 - No pagination.
+- Keywords match exact word forms: `passwords`, `DB_PASSWORD`, `apiKey` and `internal-only` need
+  their own keywords; a keyword inside running Chinese, Japanese or Thai text (no spaces) misses.
+- A keyword made only of punctuation (`+`, `--`) matches anywhere; number keywords match inside
+  punctuated numbers (`100` in `100,000`).
+- `match_count` counts every occurrence, so a repeated confidentiality footer can reach a
+  threshold that one sensitive value does not: the threshold is the false-positive control.
+- Matching is accent-sensitive (`resume` does not match `résumé`); ligatures and full-width letters
+  are folded (NFKC), soft hyphens and zero-width spaces are ignored.

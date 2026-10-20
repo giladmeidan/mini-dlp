@@ -15,8 +15,11 @@ realistic lists and ``re`` caches the last 512 patterns, so a per-Data-Type memo
 a boundary on both sides, so "@company.com" could never match in "john@company.com".
 
 Known limitations: simple case folding (i, I, İ, ı are equivalent; ß does not match SS); combining
-marks are not ``\w``, so pointed Hebrew or Indic text can match inside a word (NFC fixes only
-decomposed Latin); attached Hebrew prefixes (ו, ה, ב, ל) are not stripped.
+marks are not ``\w``, so pointed Hebrew or Indic text can match inside a word (NFKC fixes only
+decomposed Latin); attached Hebrew prefixes (ו, ה, ב, ל) are not stripped. Matching is
+accent-sensitive ("resume" does not match "résumé"); scripts written without spaces (Chinese,
+Japanese, Thai) have no word boundaries for ``\w``, so a keyword inside running text does not
+match; attached Arabic prefixes (al-) and vowel marks behave like the Hebrew case.
 """
 
 import re
@@ -28,6 +31,12 @@ from uuid import UUID
 # "A match may not begin or end between two word characters", so a non-word keyword edge needs no
 # boundary. Applied once around the whole alternation, not per keyword.
 NOT_INSIDE_WORD = r"(?!(?<=\w)\w)"
+
+# Soft hyphen, zero-width space, word joiner, zero-width no-break space: invisible, neither \w
+# nor \s, so they would split or glue words. ZWNJ/ZWJ are kept: they carry meaning in Arabic and
+# Indic scripts. A regex, not str.translate, which does a dict lookup per code point of non-ASCII
+# text. Removed before NFKC: one of them between a letter and its accent would block composition.
+_INVISIBLE = re.compile("[\u00ad\u200b\u2060\ufeff]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,10 +61,16 @@ class Detection:
     match_count: int
 
 
+def _clean(s: str) -> str:
+    """Drop invisible format chars, then NFKC: ligatures, full-width forms, canonical forms."""
+    return unicodedata.normalize("NFKC", _INVISIBLE.sub("", s))
+
+
 def _normalise(keywords: Iterable[str]) -> list[str]:
-    """NFC, collapse internal whitespace, drop empties, longest first (lower() fixes ties)."""
+    """Strip invisible format characters, NFKC, collapse internal whitespace, drop empties, longest
+    first (lower() fixes ties)."""
     # str.split() and the pattern's \s cover the same characters, so typed and matched agree.
-    cleaned = (" ".join(unicodedata.normalize("NFC", k).split()) for k in keywords)
+    cleaned = (" ".join(_clean(k).split()) for k in keywords)
     # Longest first: "credit card" beats "card" at one position. No dedupe: can't change a count.
     return sorted((k for k in cleaned if k), key=lambda k: (-len(k), k.lower()))
 
@@ -76,12 +91,12 @@ def _count(pattern: re.Pattern[str] | None, text: str) -> int:
 
 def count(rule: KeywordRule, text: str) -> int:
     """Occurrences of any of the rule's keywords in ``text``, ignoring the threshold."""
-    return _count(_build_pattern(_normalise(rule.keywords)), unicodedata.normalize("NFC", text))
+    return _count(_build_pattern(_normalise(rule.keywords)), _clean(text))
 
 
 def scan(text: str, rules: Iterable[KeywordRule]) -> list[Detection]:
     """Evaluate every rule independently; return the detected ones, most matches first."""
-    text = unicodedata.normalize("NFC", text)  # once per scan, not once per rule
+    text = _clean(text)  # once per scan, not once per rule
     detections = [
         Detection(rule.id, rule.name, n)
         for rule in rules

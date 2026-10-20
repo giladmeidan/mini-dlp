@@ -569,6 +569,45 @@
           "response": []
         },
         {
+          "name": "List Data Sets, newest first",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect(pm.response.code).to.eql(200);",
+                  "});",
+                  "pm.test(\"Both Data Sets are listed, newest first\", function () {",
+                  "    const ids = pm.response.json().map(function (ds) { return ds.id; });",
+                  "    const ds1 = ids.indexOf(pm.collectionVariables.get(\"data_set_id\"));",
+                  "    const empty = ids.indexOf(pm.collectionVariables.get(\"data_set_empty_id\"));",
+                  "    pm.expect(ds1).to.be.at.least(0);",
+                  "    pm.expect(empty).to.be.at.least(0);",
+                  "    pm.expect(empty).to.be.below(ds1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/datasets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "datasets"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Get the Data Set",
           "event": [
             {

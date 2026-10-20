@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models import DataSet, DataType
 
@@ -19,7 +19,13 @@ class DataSetRepository:
         return self.session.get(DataSet, id, with_for_update=for_update)
 
     def list_all(self) -> list[DataSet]:
-        stmt = select(DataSet).order_by(DataSet.created_at.desc(), DataSet.id.asc())
+        stmt = (
+            select(DataSet)
+            # The list shows ids only; without load_only the selectin query would carry every
+            # member's keyword array once per membership row.
+            .options(selectinload(DataSet.data_types).load_only(DataType.id, DataType.created_at))
+            .order_by(DataSet.created_at.desc(), DataSet.id.asc())
+        )
         return list(self.session.scalars(stmt))
 
     def add(self, ds: DataSet) -> None:
