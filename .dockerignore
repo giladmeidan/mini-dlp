@@ -1,0 +1,11 @@
+.git
+.venv
+**/__pycache__
+**/.DS_Store
+.pytest_cache
+.ruff_cache
+.env
+postman
+specs
+*.md
+*.pdf

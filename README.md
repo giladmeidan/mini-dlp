@@ -1,0 +1,72 @@
+# Mini DLP
+
+A small Data Loss Prevention service: administrators define Data Types (keyword
+detectors with a match threshold) and group them into Data Sets, then scan text
+against a Data Set to find which Data Types it contains. Built with FastAPI,
+SQLAlchemy 2.0, Alembic and PostgreSQL.
+
+## At a glance
+
+- One command to run: `docker compose up --build -d --wait`.
+- 6 paths, 12 operations, all documented at `/docs`.
+- 190 automated tests (121 unit, 69 integration against real PostgreSQL), runnable with Docker only.
+- Scan text limit: 1,000,000 characters.
+- A Postman collection with 28 requests and 46 assertions that cleans up after itself.
+
+## Run
+
+```sh
+docker compose up --build -d --wait
+```
+
+Then open http://localhost:8000/docs.
+
+The database is published on `127.0.0.1:5433` and the app on port `8000`. If either port is
+taken, copy `.env.example` to `.env` and set `DB_HOST_PORT` (and the port in its two URLs) or
+`APP_HOST_PORT`. `docker compose down -v` removes the stack and its data.
+
+## API
+
+| Path | Methods | Purpose |
+|------|---------|---------|
+| `/health` | GET | Health check, including the database |
+| `/api/datatypes` | GET, POST | List or create Data Types |
+| `/api/datatypes/{id}` | GET, PUT, DELETE | Read, replace or delete one Data Type |
+| `/api/datasets` | GET, POST | List or create Data Sets |
+| `/api/datasets/{id}` | GET, PUT, DELETE | Read, replace or delete one Data Set |
+| `/api/scan` | POST | Scan text against a Data Set |
+
+- Matching is case-insensitive; a match never starts or ends inside a word. `match_count` is the
+  total number of non-overlapping keyword occurrences in the text; a Data Type is detected when
+  `match_count >= threshold`.
+- `detected_objects` lists only detected Data Types, ordered by `match_count` descending.
+- Scan request: `{"text": "...", "data_set_id": "<uuid>"}`. Response: either
+  `{"status": "match", "detected_objects": [{"id", "name", "match_count"}]}` or
+  `{"status": "not matched"}`.
+- Unknown `data_set_id` returns 404. Text longer than 1,000,000 characters returns 413 (fixed for
+  the compose stack). Empty text, or a Data Set with no Data Types, returns `not matched`.
+- Deleting a Data Type that a Data Set references returns 409; detach it first.
+- `PUT` replaces the whole resource. Names are unique ignoring case; a duplicate returns 409.
+- Every error uses one envelope: `{"error": {"code", "message", "details"}}`.
+
+## Tests
+
+```sh
+docker compose --profile test run --build --rm tests
+```
+
+This needs Docker only. With uv installed on the host: `make test`.
+
+## Postman
+
+Import `postman/mini-dlp.postman_collection.json` into Postman. If the stack is not on
+`localhost:8000`, set the collection variable `base_url`. Run the collection
+**in order**; it creates, scans and deletes its own data and can be run repeatedly.
+Optional, with Node installed: `make postman`.
+
+## Limitations
+
+- The scan runs inside the request, so a very large text blocks the process for the scan's
+  duration.
+- No authentication.
+- No pagination.

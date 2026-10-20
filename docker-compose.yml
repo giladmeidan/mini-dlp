@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dlp
+      POSTGRES_PASSWORD: dlp
+      POSTGRES_DB: mini_dlp
+    ports:
+      # Published only so host-run tests can reach it. 5433 avoids a local Postgres on 5432;
+      # set DB_HOST_PORT in .env if 5433 is taken too.
+      - "127.0.0.1:${DB_HOST_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # -h localhost: use TCP, so the image's temporary init server (socket only) doesn't pass.
+      test: ["CMD-SHELL", "pg_isready -h localhost -U dlp -d mini_dlp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      target: runtime
+    ports:
+      # The API, /docs and the Postman collection's base_url. 8000 is FastAPI's usual port;
+      # set APP_HOST_PORT in .env if it is taken.
+      - "${APP_HOST_PORT:-8000}:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://dlp:dlp@db:5432/mini_dlp
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  tests:
+    profiles: ["test"]
+    build:
+      context: .
+      target: test
+    environment:
+      TEST_DATABASE_URL: postgresql+psycopg://dlp:dlp@db:5432/mini_dlp_test
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata: {}
