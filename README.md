@@ -9,7 +9,7 @@ SQLAlchemy 2.0, Alembic and PostgreSQL.
 
 - One command to run: `docker compose up --build -d --wait`.
 - 6 paths, 12 operations, all documented at `/docs`.
-- 230 automated tests (160 unit, 70 integration against real PostgreSQL), runnable with Docker only.
+- 240 automated tests (170 unit, 70 integration against real PostgreSQL), runnable with Docker only.
 - Scan text limit: 1,000,000 characters.
 - A Postman collection with 29 requests and 48 assertions that cleans up after itself.
 
