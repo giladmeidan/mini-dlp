@@ -196,6 +196,24 @@ def test_limitation_simple_case_folding_keeps_eszett_distinct():
     assert hits("strasse", "straße") == 0
 
 
+@pytest.mark.parametrize(
+    ("keyword", "text", "expected"),
+    [
+        ("σ", "ς", 1),  # final sigma equals sigma (fold)
+        ("ΟΔΟΣ", "ΟΔΟΣ.ΚΑΙ", 1),  # lower() alone would apply the final-sigma context rule
+        ("ı", "i", 1),  # dotless i equals i (fold)
+        ("İ", "i", 1),  # dotted capital I equals i, as one code point (fold)
+        ("zmir", "İzmir", 0),  # lower() alone would split İ into i + combining dot
+        ("ß", "ẞ", 1),  # lower() handles capital eszett
+        ("s", "ſ", 1),  # long s: NFKC maps it to s before the fold, so still equal
+        ("µ", "μ", 1),  # micro sign: NFKC maps it to Greek mu before the fold, so still equal
+        ("в", "ᲀ", 0),  # Cyrillic rounded ve: equal under re.IGNORECASE only (accepted, D11)
+    ],
+)
+def test_fold_equivalences_are_pinned(keyword, text, expected):
+    assert hits(keyword, text) == expected
+
+
 # --- False positives and negatives (realistic corpus) ---
 
 

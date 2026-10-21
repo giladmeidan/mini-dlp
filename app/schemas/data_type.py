@@ -12,6 +12,8 @@ from pydantic import (
     field_validator,
 )
 
+from app.scan.engine import fold
+
 
 class DataTypeKind(StrEnum):
     # The only detector today (D14). Case-sensitive: "KEYWORDS" is rejected.
@@ -72,11 +74,11 @@ class DataTypeIn(BaseModel):
     @field_validator("content")
     @classmethod
     def dedupe_case_insensitively(cls, v: list[str]) -> list[str]:
-        # lower() rather than casefold() so it agrees with re.IGNORECASE at scan time.
+        # The engine's fold, so "stored once" and "matches as equal" are the same function.
         seen: set[str] = set()
         unique: list[str] = []
         for keyword in v:
-            key = keyword.lower()
+            key = fold(keyword)
             if key not in seen:
                 seen.add(key)
                 unique.append(keyword)

@@ -80,6 +80,15 @@ def test_dedupes_case_insensitively_keeping_first_spelling_and_order():
     assert dt.content == ["Salary", "SSN"]
 
 
+def test_dedupes_with_the_engine_fold():
+    # σ/ς and İ/ı/i are one keyword each at scan time, so they are stored once.
+    dt = DataTypeIn.model_validate(
+        valid(content=["ΟΔΟΣ", "οδος", "İstanbul", "istanbul", "ıstanbul"])
+    )
+
+    assert dt.content == ["ΟΔΟΣ", "İstanbul"]
+
+
 def test_collapses_internal_whitespace_before_deduping():
     dt = DataTypeIn.model_validate(valid(content=["credit   card", "credit card", "a\t\nb"]))
 
