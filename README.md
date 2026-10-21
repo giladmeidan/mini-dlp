@@ -15,6 +15,10 @@ SQLAlchemy 2.0, Alembic and PostgreSQL.
 
 ## Run
 
+Prerequisites: Docker, running, with Compose v2 (`docker compose`; Docker Desktop includes it).
+Nothing else needs to be installed. Ports 8000 and 5433 must be free (see below to change them).
+With the older standalone binary, use `docker-compose up --build -d` instead.
+
 ```sh
 docker compose up --build -d --wait
 ```
